@@ -1,0 +1,95 @@
+---
+title: "DHARMa Practice"
+author: "Margaret Janiczek"
+date: "2023-10-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In this document I play around with the   `DHARMa` package, using some code snippets from the [package tutorial](https://cran.r-project.org/web/packages/DHARMa/vignettes/DHARMa.html) as well as adding some of my own. 
+
+# Example of "good" model
+
+Here in the simulated data the outcome is generated from a Poisson distribution. 
+We fit a GLM with logit link function and use `DHARMa` to evaluate the results- which do not indicate anything troubling with the model.
+
+```{r message=FALSE, warning = FALSE}
+#install.packages("DHARMa")
+library(DHARMa)
+library(lme4)
+library(gtsummary)
+library(MASS)
+library(tidyverse)
+
+set.seed(1219)
+testData = createData(sampleSize = 250)
+
+```
+
+Let's peak at the simulated data: 
+
+```{r}
+
+hist(testData$Environment1)
+hist(testData$observedResponse)
+
+testData %>%
+  select(observedResponse, Environment1, group) %>%
+  tbl_summary(by = group)
+
+fittedModel <- glmer(observedResponse ~ Environment1 + (1|group) , 
+                     family = "poisson", data = testData)
+
+testDispersion(fittedModel)
+
+simulationOutput <- simulateResiduals(fittedModel = fittedModel)
+
+plot(simulationOutput)
+
+plotResiduals(simulationOutput, form = testData$group)
+
+testDispersion(simulationOutput)
+```
+
+# Example of overdispersion
+
+Next we generate simulated data with overdispersion. When we fit a poisson model to this data and use the `DHARMa` functions lots of red flags come up. 
+
+```{r}
+testData2 = createData(sampleSize = 200, overdispersion = 1.5, family = poisson())
+fittedModel2 <- glm(observedResponse ~  Environment1 , family = "poisson", data = testData2)
+
+```
+
+Let's peak at the simulated data: 
+
+```{r}
+
+hist(testData2$Environment1)
+hist(testData2$observedResponse)
+
+testData2 %>%
+  select(observedResponse, Environment1, group) %>%
+  tbl_summary(by = group)
+
+
+simulationOutput2 <- simulateResiduals(fittedModel = fittedModel2)
+plot(simulationOutput2)
+
+testDispersion(simulationOutput2)
+```
+
+
+Finally I fit a negative binomial model to that overdispersed data, simulated new output and tested the results using `DHARMa`. Now it does not detect significant deviations!
+
+```{r}
+
+fittedModel_negbin<- glm.nb(observedResponse ~  Environment1 , data = testData2)
+simulationOutput3 <- simulateResiduals(fittedModel = fittedModel_negbin)
+plot(simulationOutput3)
+testDispersion(simulationOutput3)
+```
+
